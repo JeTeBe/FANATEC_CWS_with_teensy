@@ -9,54 +9,76 @@
    This example code is in the public domain.
 */
 
+
 // Configure the number of buttons.  Be careful not
 // to use a pin for both a digital button and analog
 // axis.  The pullup resistor will interfere with
 // the analog voltage.
-const int numButtons = 16;  // 16 for Teensy, 32 for Teensy++
+const int numButtons = 1;  // 16 for Teensy, 32 for Teensy++
+const int ButtonOffset = 4; // offset means starts with pin 4
+const byte encoderPinA = 2;//outputA digital pin2
 const byte encoderPinB = 3;//outoutB digital pin3
-volatile int count = 0;
-int protectedCount = 0;
-int previousCount = 0;
 
-#define readA bitRead(PIND,2)//faster than digitalRead()
-#define readB bitRead(PIND,3)//faster than digitalRead()
+volatile int count = 32767;
+unsigned int StepSize = 10;
+unsigned int protectedCount = 0;
+unsigned int previousCount = 0;
+byte allButtons[numButtons];
+byte prevButtons[numButtons];
+int angle=0;
+#define LED_PIN 13
+#define readA digitalRead(encoderPinA) //faster than digitalRead()
+#define readB digitalRead(encoderPinB) //faster than digitalRead()
+
+void isrA() {
+  if(readB != readA) {
+    digitalWrite(LED_PIN, HIGH);  // LED on
+    count += StepSize;
+  } else {
+    digitalWrite(LED_PIN, LOW);  // LED on
+    count -= StepSize;
+  }
+}
+
+void isrB() {
+  if (readA == readB) {
+    count += StepSize;
+  //digitalWrite(LED_PIN, HIGH);  // LED on
+  } else {
+    count -= StepSize;
+    //digitalWrite(LED_PIN, LOW);  // LED on
+  }
+}
 
 void setup() {
   // you can print to the serial monitor while the joystick is active!
   Serial.begin(9600);
-  // configure the joystick to manual send mode.  This gives precise
-  // control over when the computer receives updates, but it does
-  // require you to manually call Joystick.send_now().
-  Joystick.useManualSend(true);
-  for (int i=0; i<numButtons; i++) {
-    pinMode(i, INPUT_PULLUP);
-  }
-  Serial.println("Begin Complete Joystick Test");
+  while (!Serial && millis() < 4000 );
+  Serial.println("\n" __FILE__ " " __DATE__ " " __TIME__);
+  
+  pinMode(LED_PIN, OUTPUT);
+  
+  //Serial.println("Begin Complete Joystick Test");
   pinMode(encoderPinA, INPUT_PULLUP);
   pinMode(encoderPinB, INPUT_PULLUP);
+
+  for (int i=0; i<numButtons; i++) {
+    pinMode(i+ButtonOffset, INPUT_PULLUP);
+  }
  
   attachInterrupt(digitalPinToInterrupt(encoderPinA), isrA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(encoderPinB), isrB, CHANGE);
-}
+  Joystick.useManualSend(true);
 }
 
-byte allButtons[numButtons];
-byte prevButtons[numButtons];
-int angle=0;
+
 
 void loop() {
-  // read 6 analog inputs and use them for the joystick axis
-  Joystick.X(analogRead(0));
-  Joystick.Y(analogRead(1));
-  Joystick.Z(analogRead(2));
-  Joystick.Zrotate(analogRead(3));
-  Joystick.sliderLeft(analogRead(4));
-  Joystick.sliderRight(analogRead(5));
+  Joystick.X(count);
+  Joystick.Y(count);
   
-  // read digital pins and use them for the buttons
   for (int i=0; i<numButtons; i++) {
-    if (digitalRead(i)) {
+    if (digitalRead(i + ButtonOffset)) {
       // when a pin reads high, the button is not pressed
       // the pullup resistor creates the "on" signal
       allButtons[i] = 0;
@@ -64,58 +86,26 @@ void loop() {
       // when a pin reads low, the button is connecting to ground.
       allButtons[i] = 1;
     }
-    Joystick.button(i + 1, allButtons[i]);
+    Joystick.button(i + ButtonOffset, allButtons[i]);
   }
-
-  // make the hat switch automatically move in a circle
-  angle = angle + 1;
-  if (angle >= 360) angle = 0;
-  Joystick.hat(angle);
-  
-  // Because setup configured the Joystick manual send,
-  // the computer does not see any of the changes yet.
-  // This send_now() transmits everything all at once.
   Joystick.send_now();
-  
-  // check to see if any button changed since last time
-  boolean anyChange = false;
-  for (int i=0; i<numButtons; i++) {
-    if (allButtons[i] != prevButtons[i]) anyChange = true;
-    prevButtons[i] = allButtons[i];
-  }
-  
-  // if any button changed, print them to the serial monitor
-  if (anyChange) {
-    Serial.print("Buttons: ");
-    for (int i=0; i<numButtons; i++) {
-      Serial.print(allButtons[i], DEC);
-    }
-    Serial.println();
-  }
-  
-  // a brief delay, so this runs "only" 200 times per second
-  delay(5);
   noInterrupts();
   protectedCount = count;
   interrupts();
- 
+
+  
   if(protectedCount != previousCount) {
-    Serial.println(protectedCount);
+    
   }
   previousCount = protectedCount;
-}
-
-void isrA() {
-  if(readB != readA) {
-    count ++;
-  } else {
-    count --;
-  }
-}
-void isrB() {
-  if (readA == readB) {
-    count ++;
-  } else {
-    count --;
+  //digitalWrite(LED_PIN, LOW);  // LED on
+  delay(5);
+  //digitalWrite(LED_PIN, HIGH); // LED off
+  delay(5);
+  if (count < 1000)
+  {
+    //count = count +1;
+  }else{
+    //count = 0;
   }
 }
